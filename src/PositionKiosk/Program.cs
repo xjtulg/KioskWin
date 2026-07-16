@@ -55,10 +55,18 @@ internal static class Program
         if (args.Length == 2 &&
             string.Equals(args[0], "--hash-password", StringComparison.OrdinalIgnoreCase))
         {
+            // WinExe has no console — attach to parent console (PowerShell/cmd) or allocate one
+            if (!AttachConsole(ATTACH_PARENT_PROCESS))
+                AllocConsole();
+
             var result = PasswordHasher.Generate(args[1]);
-            Console.WriteLine("把下面两行填入 appsettings.json：");
+            Console.WriteLine("Add these two lines to appsettings.json:");
             Console.WriteLine("  \"AdminPasswordHash\": \"" + result.Hash + "\",");
             Console.WriteLine("  \"PasswordSalt\": \"" + result.Salt + "\"");
+            Console.WriteLine();
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
+            FreeConsole();
             return true;
         }
         return false;
@@ -100,5 +108,15 @@ internal static class Program
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    [DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(uint dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool AllocConsole();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    private const uint ATTACH_PARENT_PROCESS = 0xFFFFFFFF;
     private const int SW_RESTORE = 9;
 }
