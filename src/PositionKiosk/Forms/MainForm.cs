@@ -9,6 +9,9 @@ namespace PositionKiosk.Forms;
 
 public sealed class MainForm : Form
 {
+    private const int AdminHotKeyId = 0x5101;
+    private const int WM_HOTKEY = 0x0312;
+
     private KioskConfig _config;
     private readonly FileLogger _logger;
     private Keys _adminCombo;
@@ -21,6 +24,7 @@ public sealed class MainForm : Form
     private bool _authorizedClose;
     private bool _devToolsEnabled;
     private bool _showingAdminDialog;
+    private bool _adminHotKeyRegistered;
 
     public MainForm(KioskConfig config, FileLogger logger)
     {
@@ -53,6 +57,18 @@ public sealed class MainForm : Form
         Load += OnLoad;
         FormClosing += OnFormClosing;   // F4
         Deactivate += OnDeactivate;     // F5
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        RegisterAdminHotKey();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        UnregisterAdminHotKey();
+        base.OnHandleDestroyed(e);
     }
 
     // ---- WebView2 初始化与导航 ----
@@ -185,7 +201,7 @@ public sealed class MainForm : Form
             BeginInvoke(() => Activate());
     }
 
-    // ---- 管理员逃生通道（F8）----
+    // ---- 管理员逃生通道 ----
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -197,12 +213,27 @@ public sealed class MainForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == AdminHotKeyId)
+        {
+            ShowAdminDialog();
+            return;
+        }
+
+        base.WndProc(ref m);
+    }
+
     private void ShowAdminDialog()
     {
+        if (_showingAdminDialog)
+            return;
+
         _showingAdminDialog = true;
         try
         {
             using var dlg = new AdminDialog(_config, message => _logger.Log(message));
+            dlg.TopMost = TopMost;
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
             switch (dlg.Result)
@@ -246,8 +277,34 @@ public sealed class MainForm : Form
         }
         _config = reloaded;
         _adminCombo = KeyCombinationParser.Parse(_config.AdminKeyCombination);
+        RegisterAdminHotKey();
         _logger.Log($"[reload] url={_config.Url}");
         NavigateOrShowConfigError();
+    }
+
+    private void RegisterAdminHotKey()
+    {
+        if (!IsHandleCreated)
+            return;
+
+        UnregisterAdminHotKey();
+
+        if (_adminCombo == Keys.None ||
+            !HotKeyRegistration.TryCreate(_adminCombo, out var hotKey))
+            return;
+
+        _adminHotKeyRegistered = RegisterHotKey(Handle, AdminHotKeyId, hotKey.Modifiers, hotKey.VirtualKey);
+        if (!_adminHotKeyRegistered)
+            _logger.Log($"[hotkey] register failed: {_config.AdminKeyCombination}");
+    }
+
+    private void UnregisterAdminHotKey()
+    {
+        if (!_adminHotKeyRegistered)
+            return;
+
+        UnregisterHotKey(Handle, AdminHotKeyId);
+        _adminHotKeyRegistered = false;
     }
 
     private void ToggleDevTools()
@@ -266,4 +323,10 @@ public sealed class MainForm : Form
         WindowState = FormWindowState.Normal;
         Bounds = new Rectangle(50, 50, 1024, 768);
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, HotKeyModifiers fsModifiers, uint vk);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }
