@@ -21,3 +21,6 @@ WebView2Data/
 
 # 日志
 *.log
+
+# subagent-driven-development scratch
+.superpowers/
