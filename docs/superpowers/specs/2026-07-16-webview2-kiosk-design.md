@@ -123,6 +123,10 @@ position-win/
 
 > 接口约定：`RetryController` 暴露 `event Action ShouldRetry` 与 `Show()/Hide()` 之外的纯状态转换
 > （Idle / Waiting / Retrying），使状态机可在无 UI 依赖下单测。
+>
+> **`RetryOverlay` 是唯一的全屏遮罩组件**，可复用于不同场景，仅文本/状态不同：
+> 网络重试（"网络连接失败，正在重试…"）、配置错误（"URL 配置非法，请联系管理员"）、
+> WebView2 运行时缺失、未捕获异常的通用错误页。不要为每个场景新建不同组件。
 
 ## 7. 管理员逃生通道（`AdminDialog`）
 
@@ -168,7 +172,9 @@ position-win/
 
 - 用 `Microsoft.Extensions.Configuration.Json` 加载。启动时读一次；"重载页面"工具会热重读。
 - 校验：`Url` 必须是合法 http/https 绝对 URL；`RetryIntervalSeconds` ∈ [1, 600]。
-- 配置缺失/非法 → 用安全默认值（URL 兜底为 about:blank + 日志告警；其余用上表默认），不崩溃。
+- 配置缺失/非法 → 其余字段用上表默认值 + 日志告警；`Url` 非法时不回退 `about:blank`，
+  而是显示 `RetryOverlay` 的"配置错误"状态（"URL 配置非法，请联系管理员"），不崩溃。
+  修正配置后通过管理员"重载页面"热重读即可恢复。
 
 ### 生成密码哈希
 
