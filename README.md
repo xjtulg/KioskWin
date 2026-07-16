@@ -1,0 +1,82 @@
+# Position Kiosk
+
+Position Kiosk is a Windows kiosk shell for opening a configured web page in a full-screen WebView2 window. It is intended for locked-down display stations where the app should start automatically, stay in front, retry failed page loads, and expose a password-protected maintenance dialog.
+
+## Features
+
+- Full-screen borderless Windows Forms host with WebView2.
+- Configurable target URL, retry interval, top-most mode, taskbar visibility, and WebView2 data folder.
+- Optional automatic page fitting with hidden scrollbars via `AutoFitToWindow`.
+- Password-protected admin dialog for exit, reload, DevTools, and temporary unlock mode.
+- Global admin escape hotkey, defaulting to `Ctrl+Shift+Alt+Q`.
+- Startup shortcut install and uninstall PowerShell scripts included in publish output.
+
+## Requirements
+
+- Windows.
+- .NET SDK with `net8.0-windows` support.
+- Microsoft Edge WebView2 Runtime on target machines.
+
+## Configuration
+
+Runtime settings are read from `appsettings.json` beside `PositionKiosk.exe`.
+
+```json
+{
+  "Url": "https://example.com/",
+  "AdminKeyCombination": "Ctrl+Shift+Alt+Q",
+  "RetryIntervalSeconds": 10,
+  "TopMost": true,
+  "ShowInTaskbar": false,
+  "UserDataFolder": "WebView2Data",
+  "AutoFitToWindow": true
+}
+```
+
+Generate admin password values with:
+
+```powershell
+.\PositionKiosk.exe --hash-password <password>
+```
+
+Copy the generated `AdminPasswordHash` and `PasswordSalt` values into `appsettings.json`. If they are empty, the admin dialog can open but password verification will not pass.
+
+## Build and Test
+
+Restore, build, and test from the repository root:
+
+```powershell
+dotnet restore PositionKiosk.sln
+dotnet build PositionKiosk.sln -c Release
+dotnet test PositionKiosk.sln -c Release --no-restore --nologo
+```
+
+Create a self-contained `win-x64` publish directory and zip archive:
+
+```cmd
+build.bat
+```
+
+Use `build.bat notest` to skip tests during packaging.
+
+## Deployment
+
+After packaging, copy `publish\` or `PositionKiosk-win-x64.zip` to the target machine, edit `appsettings.json`, then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-shortcut.ps1
+```
+
+To remove the startup shortcut:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall-shortcut.ps1
+```
+
+## Project Layout
+
+- `src/PositionKiosk/`: application code.
+- `src/PositionKiosk/Core/`: config, parsing, logging, retry, hashing, and helper logic.
+- `src/PositionKiosk/Forms/`: Windows Forms UI.
+- `tests/PositionKiosk.Tests/`: xUnit tests.
+- `build.bat`: restore, test, publish, and zip script.
