@@ -1,11 +1,104 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using PositionKiosk.Core;
+using PositionKiosk.Forms;
+
 namespace PositionKiosk;
 
 internal static class Program
 {
+    private const string MutexName = "Global\\PositionKiosk_SingleInstance";
+
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        // F8：CLI 模式生成密码哈希（不启动 UI）
+        if (TryHandleHashPassword(args))
+            return;
+
         ApplicationConfiguration.Initialize();
-        Application.Run(new Form());
+
+        // F9：单实例——已有实例则尝试置前并退出
+        using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        if (!createdNew)
+        {
+            BringExistingToFront();
+            return;
+        }
+
+        // N3：全局异常兜底，避免静默崩溃
+        Application.ThreadException += (_, e) => LogException(e.Exception, "UI thread exception");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            LogException(e.ExceptionObject as Exception, "AppDomain unhandled");
+
+        try
+        {
+            var logger = new FileLogger();
+            var configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+            var config = KioskConfig.LoadFromFile(configPath);
+            logger.Log($"[startup] url={config.Url} topMost={config.TopMost}");
+            Application.Run(new MainForm(config, logger));
+        }
+        catch (Exception ex)
+        {
+            LogException(ex, "startup");
+            MessageBox.Show(
+                "程序启动失败，请查看日志：\n" + ex.Message,
+                "Position Kiosk",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
+
+    private static bool TryHandleHashPassword(string[] args)
+    {
+        if (args.Length == 2 &&
+            string.Equals(args[0], "--hash-password", StringComparison.OrdinalIgnoreCase))
+        {
+            var result = PasswordHasher.Generate(args[1]);
+            Console.WriteLine("把下面两行填入 appsettings.json：");
+            Console.WriteLine("  \"AdminPasswordHash\": \"" + result.Hash + "\",");
+            Console.WriteLine("  \"PasswordSalt\": \"" + result.Salt + "\"");
+            return true;
+        }
+        return false;
+    }
+
+    private static void BringExistingToFront()
+    {
+        try
+        {
+            var current = Process.GetCurrentProcess();
+            foreach (var p in Process.GetProcessesByName(current.ProcessName))
+            {
+                if (p.Id == current.Id || p.MainWindowHandle == IntPtr.Zero) continue;
+                SetForegroundWindow(p.MainWindowHandle);
+                ShowWindow(p.MainWindowHandle, SW_RESTORE);
+            }
+        }
+        catch
+        {
+            // best-effort，置前失败不影响单实例退出逻辑
+        }
+    }
+
+    private static void LogException(Exception? ex, string source)
+    {
+        try
+        {
+            new FileLogger().Log($"[{source}] {ex}");
+        }
+        catch
+        {
+            // 日志本身失败不要再抛，避免二次异常
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private const int SW_RESTORE = 9;
 }
