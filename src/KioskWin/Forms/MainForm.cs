@@ -212,6 +212,13 @@ public sealed class MainForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (KioskUnlockPolicy.ShouldUnlockDirectly(keyData, _config))
+        {
+            _logger.Log("[admin] direct hotkey unlock without password");
+            EnterUnlockedMode();
+            return true;
+        }
+
         if (_adminCombo != Keys.None && keyData == _adminCombo)
         {
             ShowAdminDialog();
@@ -224,6 +231,13 @@ public sealed class MainForm : Form
     {
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == AdminHotKeyId)
         {
+            if (KioskUnlockPolicy.ShouldUnlockDirectly(_adminCombo, _config))
+            {
+                _logger.Log("[admin] direct global hotkey unlock without password");
+                EnterUnlockedMode();
+                return;
+            }
+
             ShowAdminDialog();
             return;
         }

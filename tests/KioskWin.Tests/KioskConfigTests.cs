@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using KioskWin.Core;
+using System.Windows.Forms;
 using Xunit;
 
 namespace KioskWin.Tests;
@@ -66,6 +67,63 @@ public class KioskConfigTests
         Assert.True(cfg.AutoFitToWindow);
     }
 
+    [Fact]
+    public void Appsettings_defaults_to_baidu_url()
+    {
+        var root = FindRepositoryRoot();
+        var cfg = KioskConfig.LoadFromFile(Path.Combine(root, "src", "KioskWin", "appsettings.json"));
+
+        Assert.Equal("https://www.baidu.com", cfg.Url);
+    }
+
+    [Fact]
+    public void Configured_admin_hotkey_directly_unlocks_when_admin_password_is_not_configured()
+    {
+        var cfg = KioskConfig.Load(ConfigFromMemory(
+            ("AdminPasswordHash", ""),
+            ("PasswordSalt", "")));
+        var keyData = KeyCombinationParser.Parse(cfg.AdminKeyCombination);
+
+        Assert.True(KioskUnlockPolicy.ShouldUnlockDirectly(keyData, cfg));
+    }
+
+    [Theory]
+    [InlineData("", "salt")]
+    [InlineData("hash", "")]
+    public void Configured_admin_hotkey_directly_unlocks_when_admin_password_is_incomplete(string hash, string salt)
+    {
+        var cfg = KioskConfig.Load(ConfigFromMemory(
+            ("AdminPasswordHash", hash),
+            ("PasswordSalt", salt)));
+        var keyData = KeyCombinationParser.Parse(cfg.AdminKeyCombination);
+
+        Assert.True(KioskUnlockPolicy.ShouldUnlockDirectly(keyData, cfg));
+    }
+
+    [Theory]
+    [InlineData(Keys.Enter)]
+    [InlineData(Keys.F1)]
+    [InlineData(Keys.Escape)]
+    public void Non_admin_hotkeys_do_not_directly_unlock_without_admin_password(Keys keyData)
+    {
+        var cfg = KioskConfig.Load(ConfigFromMemory(
+            ("AdminPasswordHash", ""),
+            ("PasswordSalt", "")));
+
+        Assert.False(KioskUnlockPolicy.ShouldUnlockDirectly(keyData, cfg));
+    }
+
+    [Fact]
+    public void Configured_admin_hotkey_does_not_directly_unlock_when_admin_password_is_configured()
+    {
+        var cfg = KioskConfig.Load(ConfigFromMemory(
+            ("AdminPasswordHash", "hash"),
+            ("PasswordSalt", "salt")));
+        var keyData = KeyCombinationParser.Parse(cfg.AdminKeyCombination);
+
+        Assert.False(KioskUnlockPolicy.ShouldUnlockDirectly(keyData, cfg));
+    }
+
     [Theory]
     [InlineData(0, 10)]      // 非法 -> 默认 10
     [InlineData(-5, 10)]     // 非法 -> 默认 10
@@ -77,5 +135,19 @@ public class KioskConfigTests
             ("Url", "https://x"),
             ("RetryIntervalSeconds", input.ToString())));
         Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), cfg.RetryInterval);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "KioskWin.sln")))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not locate repository root.");
     }
 }

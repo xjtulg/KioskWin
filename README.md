@@ -9,6 +9,7 @@ KioskWin is a Windows kiosk shell for opening a configured web page in a full-sc
 - Optional automatic page fitting with hidden scrollbars via `AutoFitToWindow`.
 - Password-protected admin dialog for exit, reload, DevTools, and temporary unlock mode.
 - Global admin escape hotkey, defaulting to `Ctrl+Shift+Alt+Q`.
+- Direct unlock with the configured admin escape hotkey when no admin password hash and salt are configured.
 - Startup shortcut install and uninstall PowerShell scripts included in publish output.
 
 ## Requirements
@@ -23,8 +24,10 @@ Runtime settings are read from `appsettings.json` beside `KioskWin.exe`.
 
 ```json
 {
-  "Url": "https://example.com/",
+  "Url": "https://www.baidu.com",
   "AdminKeyCombination": "Ctrl+Shift+Alt+Q",
+  "AdminPasswordHash": "",
+  "PasswordSalt": "",
   "RetryIntervalSeconds": 10,
   "TopMost": true,
   "ShowInTaskbar": false,
@@ -39,7 +42,7 @@ Generate admin password values with:
 .\KioskWin.exe --hash-password <password>
 ```
 
-Copy the generated `AdminPasswordHash` and `PasswordSalt` values into `appsettings.json`. If they are empty, the admin dialog can open but password verification will not pass.
+Copy the generated `AdminPasswordHash` and `PasswordSalt` values into `appsettings.json`. If either value is empty, pressing the configured `AdminKeyCombination` directly switches the kiosk into temporary unlocked mode. The default escape hotkey is `Ctrl+Shift+Alt+Q`.
 
 ## Build and Test
 
